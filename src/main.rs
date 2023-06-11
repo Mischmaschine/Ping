@@ -1,15 +1,36 @@
-use ping::{PingResult, ping};
+extern crate pretty_env_logger;
+#[macro_use]
+extern crate log;
 
-fn main() -> PingResult<()> {
-    let host = "example.com";
-    let timeout = std::time::Duration::from_secs(5);
-    let response = ping(host, timeout)?;
+use fastping_rs::PingResult::{Idle, Receive};
+use fastping_rs::Pinger;
+use std::env;
 
-    if response.dropped > 0 {
-        println!("Failed to receive {} packets", response.dropped);
-    } else {
-        println!("Received {} packets in {}ms", response.received, response.time_ms);
+fn main() {
+    if env::var("RUST_LOG").is_err() {
+        env::set_var("RUST_LOG", "info");
     }
 
-    Ok(())
+    pretty_env_logger::init();
+    let (pinger, results) = match Pinger::new(None, Some(56)) {
+        Ok((pinger, results)) => (pinger, results),
+        Err(e) => panic!("Error creating pinger: {}", e),
+    };
+
+    pinger.add_ipaddr("1.1.1.1"); // add the IP addresses to ping here
+    pinger.run_pinger();
+
+    loop {
+        match results.recv() {
+            Ok(result) => match result {
+                Idle { addr } => {
+                    error!("Idle Address {}.", addr);
+                }
+                Receive { addr, rtt } => {
+                    info!("Receive from Address {} in {:?}.", addr, rtt);
+                }
+            },
+            Err(_) => panic!("Worker threads disconnected before the solution was found!"),
+        }
+    }
 }
